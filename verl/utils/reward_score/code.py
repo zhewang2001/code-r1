@@ -92,25 +92,28 @@ def extract_code_from_string(solution_str):
 
 CODE_RPC_URL = os.getenv("CODE_RPC_URL", "http://localhost:8000")
 def _compute_score(solution_str, ground_truth, format_reward=0.5, answer_reward=1.):
-    reward_log = "-"*16 + "Model Output" + "-"*16 + "\n" + solution_str + "\n"
+    reward_log = [ "-"*16 + "Model Output" + "-"*16, solution_str]
 
     # ground_truth is not code, but tests
     pass_fmt, validation_log = validate_response_structure(solution_str)
     solution_code = extract_code_from_string(solution_str)
 
     if not pass_fmt or len(solution_code) == 0:
-        reward_log += "-"*16 + "Bad format detected!" + "-"*16 + "\n"
-        reward_log += validation_log + "\n"
-        return - answer_reward - format_reward, reward_log
+        reward_log.append("-"*16 + "Bad format detected!" + "-"*16)
+        reward_log.append(validation_log)
+        return - answer_reward - format_reward, "\n".join(reward_log)
 
-    reward_log += "-"*16 + "Code Execution" + "-"*16 + "\n" + solution_code + "\n"
+    reward_log.append("-"*16 + "Code Execution" + "-"*16)
+    reward_log.append(solution_code)
     pass_test, output = exec_test(CODE_RPC_URL, solution_code + "\n" + ground_truth)
     if not pass_test:
-        reward_log += "-"*16 + "Code Execution Failed! (Exception)" + "-"*16 + "\n" + output + "\n"
-        return format_reward, reward_log
+        reward_log.append("-"*16 + "Code Execution Failed! (Exception)" + "-"*16)
+        reward_log.append(output)
+        return format_reward, "\n".join(reward_log)
 
-    reward_log += "-"*16 + "Code Execution Passed! (Output)" + "-"*16 + "\n" + output + "\n"
-    return format_reward + answer_reward, reward_log
+    reward_log.append("-"*16 + "Code Execution Passed! (Output)" + "-"*16)
+    reward_log.append(output)
+    return format_reward + answer_reward, "\n".join(reward_log)
 
 def compute_score(solution_str, ground_truth, format_reward=0.5, answer_reward=1.):
     score, reward_log = _compute_score(solution_str, ground_truth, format_reward, answer_reward)

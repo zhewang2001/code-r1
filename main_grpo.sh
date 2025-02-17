@@ -20,13 +20,13 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.model.enable_gradient_checkpointing=False \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
-    actor_rollout_ref.actor.fsdp_config.grad_offload=True \
+    actor_rollout_ref.actor.fsdp_config.grad_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=256 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.5 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.4 \
     actor_rollout_ref.rollout.n=16 \
     actor_rollout_ref.ref.log_prob_micro_batch_size=256 \
     actor_rollout_ref.ref.fsdp_config.param_offload=False \
@@ -38,7 +38,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     trainer.default_local_dir=./output \
     trainer.n_gpus_per_node=$GPUS_PER_NODE \
-    trainer.save_freq=-1 \
+    trainer.save_freq=64 \
     trainer.test_freq=8 \
-    reward_model.reward_manager=prime \
-    trainer.total_epochs=5 $@ 2>&1 | tee grpo.log
+    trainer.total_epochs=6 \
+    reward_model.reward_manager=prime $@ 2>&1 | tee grpo.log
