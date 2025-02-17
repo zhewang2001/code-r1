@@ -1,3 +1,6 @@
+# code r1
+data/
+
 **/*.pt
 **/checkpoints
 **/wget-log

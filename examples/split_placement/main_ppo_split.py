@@ -19,6 +19,7 @@ from verl import DataProto
 import torch
 from verl.utils.reward_score import gsm8k, math
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
+from verl.utils.reward_score import code
 
 
 def _select_rm_score_fn(data_source):
@@ -26,6 +27,8 @@ def _select_rm_score_fn(data_source):
         return gsm8k.compute_score
     elif data_source == 'lighteval/MATH':
         return math.compute_score
+    elif data_source == 'code':
+        return code.compute_score
     else:
         raise NotImplementedError
 
