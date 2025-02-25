@@ -17,10 +17,78 @@ import re
 import os
 import torch
 import argparse
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForTokenClassification
 from concurrent.futures import ThreadPoolExecutor
 from torch.distributed._tensor import DTensor, Shard, Placement
 
+import json
+from examples.data_preprocess.coder1 import SYSTEM_PROMPT
+
+def rewrite_chat_template(model_path: str):
+    with open(os.path.join(model_path, 'tokenizer_config.json'), 'r') as f:
+        tokenizer_config = json.load(f)
+
+    tokenizer_config['chat_template'] = r"""{%- set default_system_prompt = PATTERN_TO_REPLACE %}
+
+{%- if tools %}
+    {{- '<|im_start|>system\n' }}
+    {%- if messages[0]['role'] == 'system' %}
+        {{- messages[0]['content'] }}
+    {%- else %}
+        {{- default_system_prompt }}
+    {%- endif %}
+    {{- "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>" }}
+    {%- for tool in tools %}
+        {{- "\n" }}
+        {{- tool | tojson }}
+    {%- endfor %}
+    {{- "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
+{%- else %}
+    {%- if messages[0]['role'] == 'system' %}
+        {{- '<|im_start|>system\n' + messages[0]['content'] + '<|im_end|>\n' }}
+    {%- else %}
+        {{- '<|im_start|>system\n' + default_system_prompt + '<|im_end|>\n' }}
+    {%- endif %}
+{%- endif %}
+{%- for message in messages %}
+    {%- if (message.role == "user") or (message.role == "system" and not loop.first) or (message.role == "assistant" and not message.tool_calls) %}
+        {{- '<|im_start|>' + message.role + '\n' + message.content + '<|im_end|>' + '\n' }}
+    {%- elif message.role == "assistant" %}
+        {{- '<|im_start|>' + message.role }}
+        {%- if message.content %}
+            {{- '\n' + message.content }}
+        {%- endif %}
+        {%- for tool_call in message.tool_calls %}
+            {%- if tool_call.function is defined %}
+                {%- set tool_call = tool_call.function %}
+            {%- endif %}
+            {{- '\n<tool_call>\n{"name": "' }}
+            {{- tool_call.name }}
+            {{- '", "arguments": ' }}
+            {{- tool_call.arguments | tojson }}
+            {{- '}\n</tool_call>' }}
+        {%- endfor %}
+        {{- '<|im_end|>\n' }}
+    {%- elif message.role == "tool" %}
+        {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != "tool") %}
+            {{- '<|im_start|>user' }}
+        {%- endif %}
+        {{- '\n<tool_response>\n' }}
+        {{- message.content }}
+        {{- '\n</tool_response>' }}
+        {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}
+            {{- '<|im_end|>\n' }}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+{%- endif %}""".replace("PATTERN_TO_REPLACE", repr(SYSTEM_PROMPT))
+    print("New chat template: ", tokenizer_config['chat_template'])
+
+    with open(os.path.join(model_path, 'tokenizer_config.json'), 'w') as f:
+        json.dump(tokenizer_config, f, indent=2)
 
 def merge_by_placement(tensors: List[torch.Tensor], placement: Placement):
     if placement.is_replicate():
@@ -33,6 +101,7 @@ def merge_by_placement(tensors: List[torch.Tensor], placement: Placement):
         raise ValueError(f"Unsupported placement: {placement}")
 
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--local_dir', required=True, type = str, help="The path for your saved model")
@@ -42,16 +111,18 @@ if __name__ == '__main__':
     assert not args.local_dir.endswith("huggingface"), "The local_dir should not end with huggingface"
     local_dir = args.local_dir
 
+    rewrite_chat_template(os.path.join(local_dir, 'huggingface'))
+
     # copy rank zero to find the shape of (dp, fsdp)
     rank = 0
     world_size = 0
     for filename in os.listdir(local_dir):
         match = re.match(r"model_world_size_(\d+)_rank_0\.pt", filename)
         if match:
-            world_size = match.group(1)  
-            break  
+            world_size = match.group(1)
+            break
     assert world_size, "No model file with the proper format"
-        
+
     state_dict = torch.load(os.path.join(local_dir, f'model_world_size_{world_size}_rank_{rank}.pt'), map_location='cpu')
     pivot_key = sorted(list(state_dict.keys()))[0]
     weight = state_dict[pivot_key]
@@ -161,10 +232,3 @@ if __name__ == '__main__':
             repo_id=args.hf_upload_path,
             repo_type="model"
         )
-    
-    
-
-
-
-
-
