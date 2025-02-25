@@ -44,7 +44,6 @@ python3 -m verl.trainer.main_ppo \
     data.train_files=data/$DATASET/train.parquet \
     data.val_files=data/$DATASET/test.parquet \
     data.train_batch_size=$ROLLOUT_N_QUERY \
-    data.val_batch_size=$(($ROLLOUT_N_QUERY * 2)) \
     data.max_prompt_length=2048 \
     data.max_response_length=4096 \
     actor_rollout_ref.model.path=$MODEL_PATH \
