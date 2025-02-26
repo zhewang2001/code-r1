@@ -71,7 +71,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     trainer.default_local_dir=./models/${DATASET}-grpo \
     trainer.n_gpus_per_node=$GPUS_PER_NODE \
-    trainer.save_freq=32 \
+    trainer.save_freq=64 \
     trainer.test_freq=8 \
     trainer.total_epochs=$MAX_EPOCHS \
     reward_model.reward_manager=prime $@ 2>&1 | tee grpo.log

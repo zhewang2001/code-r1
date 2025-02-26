@@ -36,13 +36,14 @@ def code_exec_firejail(code, stdin: str = None, timeout=_DEFAULT_TIMEOUT_SECONDS
     command = [
         "firejail",
         "--private",
+        "--quiet",
+        "--profile=pip",
         "--rlimit-nproc=16",
         "--rlimit-nofile=16",
         "--rlimit-fsize=512k",  # Limit file size
         "--rlimit-as=4096m",
         f"--timeout=00:00:{timeout}",
-        "--seccomp=socket",
-        "python",
+        "python3",
     ]
 
     if len(code) < CLI_ARG_SIZE_LIMIT:
@@ -65,15 +66,7 @@ def code_exec_firejail(code, stdin: str = None, timeout=_DEFAULT_TIMEOUT_SECONDS
                                     env=env,
                                     check=False)
 
-    def _simplify_stderr(stderr):
-        return "\n".join(
-            line for line in stderr.split("\n")
-            if not line.startswith("Reading profile") and not line.startswith("Parent is shutting") and
-            not line.startswith("Child process initialized") and not line.startswith("Warning: not remounting") and
-            not line.startswith("Seccomp list in: ") and not line.startswith("** Note: you can use --noprofile") and
-            not line.startswith("Warning: networking feature is disabled") and not line.startswith("Parent pid"))
-
-    stderr = _simplify_stderr(result.stderr.decode()).strip()
+    stderr = result.stderr.decode().strip()
     stdout = result.stdout.decode()
 
     if result.returncode == 0:
