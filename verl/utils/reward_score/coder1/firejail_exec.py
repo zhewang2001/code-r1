@@ -58,6 +58,7 @@ def code_exec_firejail(code, stdin: str = None, timeout=_DEFAULT_TIMEOUT_SECONDS
         with NamedTemporaryFile() as tmp:
             tmp.write(code.encode())
             tmp.flush()
+            command.insert(4, f"--whitelist={tmp.name}")
             command.append(tmp.name)
             result = subprocess.run(command,
                                     input=stdin.encode() if stdin else None,
