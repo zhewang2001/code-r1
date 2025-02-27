@@ -6,7 +6,6 @@ import os
 import json
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from multiprocessing import cpu_count
 
 from datasets import load_dataset, concatenate_datasets
 from rich.rule import Rule
@@ -14,6 +13,15 @@ import rich
 
 from verl.utils.hdfs_io import copy, makedirs
 from verl.utils.reward_score.coder1 import code_exec, remote_check_stdio, _ERROR_MSG_PREFIX
+
+N_TESTSET = 512  # per dataset
+_EMPTY_RETURN_ = {
+    "data_source": None,
+    "prompt": None,
+    "ability": None,
+    "reward_model": None,
+    "extra_info": None,
+}
 
 
 def minimize_stdio(inputs, outputs, max_n_tests=8):
@@ -40,25 +48,18 @@ def minimize_stdio(inputs, outputs, max_n_tests=8):
     return list(sorted_stdin[:max_n_tests]), list(sorted_stdout[:max_n_tests])
 
 
-SYSTEM_PROMPT = """You are a helpful programming assistant. The user will ask you a question, and you as the assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think></think> and <answer></answer> tags, respectively. For example:
-<think>
-Let's think step by step to solve the programming task in high quality...
-{thinking processing...}
-</think>
-<answer>
-The code below solves the task and is vulnerability-free...
-```{language}
-{code...}
-```
-</answer>"""
+SYSTEM_PROMPT = """You are a helpful programming assistant. \
+The user will ask you a question and you as the assistant solve it. \
+The assistant first thinks how to solve the task through reasoning and then provides the user with the final answer. \
+The reasoning process and answer are enclosed within <think>...</think> and <answer>...</answer> tags, respectively."""
 
 PY_IMPORTS = "import heapq\nfrom math import floor, gcd\nimport random\nimport sys\nfrom typing import *\nfrom functools import *\nimport collections\nfrom collections import *\nfrom itertools import *\nfrom heapq import *\nfrom bisect import *\nfrom string import *\nimport math\nimport datetime\ninf = float('inf')\n"
 
 
 # this dataset is super noisy and needs code execution to verify the tasks
-def taco(max_n_tests=8):
+def taco():
     rich.print(Rule("Loading likaixin/TACO-verified..."))
-    dataset = load_dataset("likaixin/TACO-verified", trust_remote_code=True)
+    dataset = load_dataset("likaixin/TACO-verified")["train"]
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
@@ -69,15 +70,15 @@ def taco(max_n_tests=8):
 
             # skip poorly formatted examples
             if source in ["geeksforgeeks", "leetcode"]:
-                return None
+                return _EMPTY_RETURN_
 
             # too short description
             if len("".join([c for c in example["question"] if c.isalnum()])) < 100:
-                return None
+                return _EMPTY_RETURN_
 
             # no image
             if "image" in example["question"].lower() or "\n![" in example["question"]:
-                return None
+                return _EMPTY_RETURN_
 
             prompt_pieces = [
                 "Solve the programming task below in a Python markdown code block.",
@@ -120,17 +121,19 @@ for i, o in zip(_inputs, _outputs):
                 _check_test = example["solutions"][-1] + "\n" + test_code
                 if source in ["leetcode"]:
                     _check_test = PY_IMPORTS + _check_test
-                if not code_exec(_check_test)[0]:
-                    rich.print("[bold red]Test code failed!")
+
+                succ, err = code_exec(_check_test)
+                if not succ:
+                    rich.print(f"[bold red]Test code failed for {source}")
                     print(_check_test)
-                    print(source)
-                    return None
+                    print(err)
+                    return _EMPTY_RETURN_
                 oracle = json.dumps({"functional": test_code})
                 assert example["starter_code"].strip() != ""
             elif "inputs" in oracle and "outputs" in oracle:
-                stdin_list, stdout_list = minimize_stdio(oracle["inputs"], oracle["outputs"], max_n_tests)
+                stdin_list, stdout_list = minimize_stdio(oracle["inputs"], oracle["outputs"])
                 if len(stdin_list) == 0:
-                    return None
+                    return _EMPTY_RETURN_
 
                 with ThreadPoolExecutor(max_workers=min(len(stdin_list), 8)) as executor:
                     futures = []
@@ -148,19 +151,19 @@ for i, o in zip(_inputs, _outputs):
                             rich.print(f"[bold red]Test code failed for {source}")
                             print(example["solutions"][-1])
                             print(f"{exec_succ = }")
-                            print(f"{repr(stdin) = }", f"{repr(stdout) = }")
+                            print(f"{stdin = }", f"{stdout = }")
                             if output.startswith(_ERROR_MSG_PREFIX):
-                                print(f"{output = }")
+                                print("output = \n", output)
                             else:
-                                print(f"{repr(output) = }")
-                            return None
+                                print(f"{output = }")
+                            return _EMPTY_RETURN_
 
                 oracle = json.dumps({"inputs": stdin_list, "outputs": stdout_list})
             else:
                 raise ValueError(f"Unknown ground truth format: {oracle}")
 
             prompt = "\n".join(prompt_pieces)
-            data = {
+            return {
                 "data_source": "code",
                 "prompt": [
                     {
@@ -185,17 +188,20 @@ for i, o in zip(_inputs, _outputs):
                     "dataset": "likaixin/TACO-verified",
                 },
             }
-            return data
 
         return process_fn
 
-    dataset = dataset.map(function=make_map_fn("train"), with_indices=True,
-                          num_proc=min(64, cpu_count())).filter(lambda x: x is not None)
-
-    N_TESTSET = 1000
-    splits = dataset["train"].train_test_split(test_size=N_TESTSET, seed=666)
+    dataset = dataset.map(function=make_map_fn("train"),
+                          with_indices=True,
+                          num_proc=64,
+                          remove_columns=dataset.column_names).filter(lambda x: x != _EMPTY_RETURN_)
+    splits = dataset.train_test_split(test_size=max(1, min(N_TESTSET, len(dataset) * 0.1)), seed=666)
     train_dataset = splits["train"]
     test_dataset = splits["test"]
+
+    for t in dataset:
+        print(f"{t = }")
+        t["extra_info"]["split"] = "test"
 
     return train_dataset, test_dataset
 
@@ -205,7 +211,7 @@ def codecontests(max_n_tests=8):
     rich.print(Rule("Loading deepmind/code_contests..."))
     dataset = load_dataset("deepmind/code_contests")
     train_dataset = dataset["train"]
-    test_dataset = dataset["valid"]
+    test_dataset = dataset["valid"][:N_TESTSET]
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
@@ -213,7 +219,7 @@ def codecontests(max_n_tests=8):
         def process_fn(example, idx):
             if "<image>" in example["description"]:
                 print("Description includes image, skipping...")
-                return None
+                return _EMPTY_RETURN_
 
             stdin_list = (example["public_tests"]["input"] + example["private_tests"]["input"] +
                           example["generated_tests"]["input"])
@@ -223,7 +229,7 @@ def codecontests(max_n_tests=8):
             stdin_list, stdout_list = minimize_stdio(stdin_list, stdout_list, max_n_tests)
             assert len(stdin_list) == len(stdout_list)
             if len(stdin_list) == 0:
-                return None
+                return _EMPTY_RETURN_
 
             prompt = ("Solve the programming task below in a Python markdown code block. "
                       "Each time, given inputs through STDIN (like those in the 'Input' section), the program "
@@ -260,10 +266,10 @@ def codecontests(max_n_tests=8):
 
         return process_fn
 
-    train_dataset = train_dataset.map(function=make_map_fn("train"), with_indices=True).filter(lambda x: x is not None)
+    train_dataset = train_dataset.map(function=make_map_fn("train"),
+                                      with_indices=True,
+                                      remove_columns=dataset.column_names).filter(lambda x: x != _EMPTY_RETURN_)
     test_dataset = test_dataset.map(function=make_map_fn("test"), with_indices=True)
-    from IPython import embed
-    embed()
     return train_dataset, test_dataset
 
 
