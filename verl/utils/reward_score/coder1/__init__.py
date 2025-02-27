@@ -13,7 +13,10 @@ from .utils import _ERROR_MSG_PREFIX
 _MAX_CHAR_DISPLAY = 2048
 CODER1_EXEC = os.environ.get("CODER1_EXEC", "firejail")
 
-if CODER1_EXEC == "firejail":
+if CODER1_EXEC == "docker":
+    from .docker_exec import code_exec_docker
+    code_exec = code_exec_docker
+elif CODER1_EXEC == "firejail":
     from .firejail_exec import code_exec_firejail
     code_exec = code_exec_firejail
 elif CODER1_EXEC == "ces":
@@ -31,30 +34,9 @@ def remote_check_stdio(code, stdin, stdout):
     return succ, output, stdin, stdout
 
 
-# https://github.com/Unakar/Logic-RL/blob/main/verl/utils/reward_score/kk.py
 def validate_response_structure(processed_str: str) -> bool:
-    # Check required tags
-    tags = {
-        'think_start': ('<think>', 1),
-        'think_end': ('</think>', 1),
-        'answer_start': ('<answer>', 1),
-        'answer_end': ('</answer>', 1)
-    }
-
-    positions = {}
-    for tag_name, (tag_str, expected_count) in tags.items():
-        count = processed_str.count(tag_str)
-        positions[tag_name] = processed_str.find(tag_str)
-
-        if count != expected_count:
-            return False
-
-    # Verify tag order
-    if (positions['think_start'] > positions['think_end'] or positions['think_end'] > positions['answer_start'] or
-            positions['answer_start'] > positions['answer_end']):
-        return False
-
-    return True
+    pattern = re.compile(r'<think>.*</think>.*<answer>.*</answer>$', re.DOTALL)
+    return bool(pattern.match(processed_str.strip()))
 
 
 # https://github.com/Unakar/Logic-RL/blob/main/verl/utils/reward_score/kk.py
