@@ -47,7 +47,7 @@ python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=2048 \
     data.max_response_length=4096 \
     actor_rollout_ref.model.path=$MODEL_PATH \
-    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.optim.lr=5e-7 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$GLOBAL_BATCH_SIZE \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=$MICRO_BATCH_PER_GPU \
@@ -72,6 +72,6 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir=./models/${DATASET}-grpo \
     trainer.n_gpus_per_node=$GPUS_PER_NODE \
     trainer.save_freq=64 \
-    trainer.test_freq=8 \
+    trainer.test_freq=16 \
     trainer.total_epochs=$MAX_EPOCHS \
     reward_model.reward_manager=prime $@ 2>&1 | tee grpo.log
