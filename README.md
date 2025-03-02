@@ -39,7 +39,7 @@ sudo apt-get install firejail firejail-profiles
 
 The current version has 12K RL samples (prompt + tests):
 * [2K LeetCode data](https://github.com/newfacade/LeetCodeDataset) where the tests are generally reliable
-* 10K verified data filtered from 26K [TACO](https://huggingface.co/datasets/BAAI/TACO) data. 
+* 10K verified data filtered from 26K [TACO](https://huggingface.co/datasets/BAAI/TACO) data.
 
 In general, it's suggesgted to test data & sandbox on every dataset & environment before training code RL.
 Directly using noisy data and mismatched envornment can lead to execution false positives, leading to noisy rewards that confuse the model.
