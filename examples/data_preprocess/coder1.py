@@ -14,7 +14,7 @@ import rich
 from verl.utils.hdfs_io import copy, makedirs
 from verl.utils.reward_score.coder1 import code_exec, remote_check_stdio, _ERROR_MSG_PREFIX
 
-N_TESTSET = 512  # per dataset
+N_TESTSET_PER_DATASET = 512  # per dataset
 _EMPTY_RETURN_ = {
     "data_source": None,
     "prompt": None,
@@ -54,6 +54,81 @@ The assistant first thinks how to solve the task through reasoning and then prov
 The reasoning process and answer are enclosed within <think>...</think> and <answer>...</answer> tags, respectively."""
 
 PY_IMPORTS = "import heapq\nfrom math import floor, gcd\nimport random\nimport sys\nfrom typing import *\nfrom functools import *\nimport collections\nfrom collections import *\nfrom itertools import *\nfrom heapq import *\nfrom bisect import *\nfrom string import *\nimport math\nimport datetime\ninf = float('inf')\n"
+
+
+def kodcode():  # Thanks!!! to Zhangchen and Yueqin
+    # library requirements?
+    rich.print(Rule("Loading KodCode/KodCode-V1-SFT-R1..."))
+    dataset = load_dataset("KodCode/KodCode-V1-SFT-R1")
+
+    packages = [
+        "beautifulsoup4", "fake-useragent", "imageio", "keras", "lxml", "matplotlib", "numpy", "opencv-python",
+        "pandas", "pillow", "requests", "rich", "scikit-learn", "sphinx-pyproject", "statsmodels", "sympy", "tweepy",
+        "typing_extensions", "xgboost", "flask", "seaborn"
+    ]
+    block_libs = [
+        "fake-useragent", "keras", "socket", "torch", "scipy", "sklearn", "cv2", "scipy", "imageio", "sphinx-pyproject",
+        "xgboost", "tweepy", "flask", "matplotlib", "pillow", "seaborn", "smtpd"
+    ]
+
+    def make_map_fn(split):
+
+        def process_fn(example, idx):
+            reference_solution = example["solution"]
+            test_code = "from solution import *\n" + example["test_code"].strip()
+            # skip it if reference solution requires libs from block_libs
+            if any(lib in reference_solution for lib in block_libs):
+                return _EMPTY_RETURN_
+            if any(lib in test_code for lib in block_libs):
+                return _EMPTY_RETURN_
+            prompt = f"Please solve the programming task below in Python. Code should wrapped in a markdown code block.\n\n{example['question'].strip()}"
+            if example["test_entry_point"] and example["test_entry_point"].strip():
+                prompt += f"\n\nNote that the output function should be {example['test_entry_point'].strip()}."
+
+            succ, err = code_exec(code=reference_solution, pytest=test_code)
+            if not succ:
+                rich.print(f"[bold red]Test code failed for {example['conversation_id']}")
+                print(reference_solution)
+                print(err)
+                return _EMPTY_RETURN_
+
+            return {
+                "data_source": "code",
+                "prompt": [
+                    {
+                        "role": "system",
+                        "content": SYSTEM_PROMPT
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    },
+                ],
+                "ability": "coding",
+                "reward_model": {
+                    "style": "rule",
+                    "ground_truth": json.dumps({"pytest": test_code}),
+                },
+                "extra_info": {
+                    "split": split,
+                    "index": idx,
+                    "reference": reference_solution,
+                    "prompt": prompt,
+                    "dataset": "flydust/KodCode-V1",
+                },
+            }
+
+        return process_fn
+
+    dataset = dataset.map(
+        function=make_map_fn("train"),
+        with_indices=True,
+        num_proc=64,
+    )
+    splits = dataset["train"].train_test_split(test_size=N_TESTSET_PER_DATASET, seed=666)
+    train_dataset = splits["train"].shuffle(seed=666)
+    test_dataset = splits["test"]
+    return train_dataset, test_dataset
 
 
 # this dataset is super noisy and needs code execution to verify the tasks
@@ -195,7 +270,7 @@ for i, o in zip(_inputs, _outputs):
                           with_indices=True,
                           num_proc=64,
                           remove_columns=dataset.column_names).filter(lambda x: x != _EMPTY_RETURN_)
-    splits = dataset.train_test_split(test_size=max(1, min(N_TESTSET, len(dataset) * 0.1)), seed=666)
+    splits = dataset.train_test_split(test_size=max(1, min(N_TESTSET_PER_DATASET, len(dataset) * 0.1)), seed=666)
     train_dataset = splits["train"]
     test_dataset = splits["test"]
 
@@ -207,11 +282,11 @@ for i, o in zip(_inputs, _outputs):
 
 
 # Some tests are very broken and needs verification
-def codecontests(max_n_tests=8):
+def codecontests():
     rich.print(Rule("Loading deepmind/code_contests..."))
     dataset = load_dataset("deepmind/code_contests")
     train_dataset = dataset["train"]
-    test_dataset = dataset["valid"][:N_TESTSET]
+    test_dataset = dataset["valid"][:N_TESTSET_PER_DATASET]
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
@@ -357,7 +432,10 @@ if __name__ == "__main__":
     train_datasets = []
     test_datasets = []
 
-    for train, test in [leetcode2k(), taco()]:
+    dataset_makes = [leetcode2k, taco]
+    names = "-".join([make.__name__ for make in dataset_makes])
+
+    for train, test in [make() for make in dataset_makes]:
         train_datasets.append(train)
         test_datasets.append(test)
 
@@ -368,7 +446,7 @@ if __name__ == "__main__":
     print("Train set:", train_dataset)
     print("Test set:", test_dataset)
 
-    local_dir = os.path.join(root_dir, f"code-r1-{round(len(train_dataset) / 1000)}k")
+    local_dir = os.path.join(root_dir, f"code-r1-{round(len(train_dataset) / 1000)}k-{names}")
     rich.print(f"[bold green]Saving to {local_dir}...")
     train_dataset.to_parquet(os.path.join(local_dir, "train.parquet"))
     test_dataset.to_parquet(os.path.join(local_dir, "test.parquet"))

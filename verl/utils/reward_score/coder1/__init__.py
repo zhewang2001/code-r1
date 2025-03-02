@@ -84,8 +84,11 @@ def _compute_score(solution_str, ground_truth, extra_info, format_reward=0.1, an
     else:
         reward_log.append(solution_code)
 
-    if "functional" in ground_truth:
-        succ, output = code_exec(solution_code + "\n" + ground_truth["functional"])
+    if "pytest" in ground_truth or "functional" in ground_truth:
+        if "functional" in ground_truth:
+            succ, output = code_exec(solution_code + "\n" + ground_truth["functional"])
+        else:  # pytest
+            succ, output = code_exec(solution_code, pytest=ground_truth["pytest"])
         if not succ:
             reward_log.append("!" * 16 + f"⚠️ Test Execution Failed in {time.time() - t_start:.1f}s" + "!" * 16)
             reward_log.append(output[:_MAX_CHAR_DISPLAY])
@@ -95,18 +98,6 @@ def _compute_score(solution_str, ground_truth, extra_info, format_reward=0.1, an
     elif "inputs" in ground_truth and "outputs" in ground_truth:
         stdin_list: str = ground_truth["inputs"]
         stdout_list: str = ground_truth["outputs"]
-
-        # for stdin, stdout in zip(stdin_list, stdout_list):
-        #     succ, output, stdin, stdout = remote_check_stdio(code=solution_code, stdin=stdin, stdout=stdout)
-        #     if not succ or output.strip() != stdout.strip():
-        #         reward_log.append("!" * 16 + f"⚠️ Test Execution Failed in {time.time() - t_start:.1f}s" + "!" * 16)
-        #         reward_log.append(f"🔎Input: {repr(stdin)}")
-        #         reward_log.append(f"✅Expected: {repr(stdout.strip())}")
-        #         reward_log.append(
-        #             f"❌Actual: {output if output.startswith(_ERROR_MSG_PREFIX) else repr(output.strip())}")
-        #         reward_log.append("-" * 16 + "Failed Prompt" + "-" * 16)
-        #         reward_log.append(extra_info["prompt"].replace("\n\n", "\n"))
-        #         return format_reward, "\n".join(reward_log)
 
         # Add parallelism
         with ThreadPoolExecutor(max_workers=min(8, len(stdin_list))) as executor:
