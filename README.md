@@ -1,4 +1,4 @@
-# Code-R1
+# Code-R1: Reproducing R1 for Code with Reliable Rewards
 
 This repository includes implementations to reproduce the R1 pipeline for code generation:
 
@@ -75,3 +75,25 @@ Some existing models:
 * Qwen2.5-Coder-7B-Instruct, despite released months back, is still very performant as the best baseline, but we don't know where the improvement comes from.
 * Eurus-2-7B-PRIME starts from Qwen2.5-Math-7B-Instruct and is RL only. Its training data includes (unfiltered) extensive coding datasets, including APPS, CodeContests, TACO, and Codeforces. Code-R1-Zero outperforms it significantly despite using fewer data, likely because we validated our datasets before running.
 * Sky-T1-7B uses a combination of RL and SFT/distillation steps. Its RL partially uses PRIME but its training data does not (seem to) include coding datasets.
+
+## Citation
+
+If you find this work helpful...
+
+```bibtex
+@article{code-r1,
+  title={Code-R1: Reproducing R1 for Code with Reliable Rewards},
+  author={Liu, Jiawei and Zhang, Lingming},
+  howpublished={\url{https://github.com/ganler/code-r1}},
+  year={2025}
+}
+```
+
+## Acknowledgements
+
+* [Verl](https://github.com/volcengine/verl)
+* [Logic-RL](https://github.com/Unakar/Logic-RL)
+
+## License
+
+Apache-2.0. See [LICENSE.code-r1](LICENSE.code-r1) for more details.
