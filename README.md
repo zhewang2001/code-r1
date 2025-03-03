@@ -37,7 +37,8 @@ sudo apt-get install firejail firejail-profiles
 
 ### Datasets
 
-The current version has 12K RL samples (prompt + tests):
+The current version has 12K RL samples (prompt + tests) at [🤗 ganler/code-r1-12k](https://huggingface.co/datasets/ganler/code-r1-12k):
+
 * [2K LeetCode data](https://github.com/newfacade/LeetCodeDataset) where the tests are generally reliable
 * 10K verified data filtered from 26K [TACO](https://huggingface.co/datasets/BAAI/TACO) data.
 
@@ -45,7 +46,7 @@ In general, it's suggesgted to test data & sandbox on every dataset & environmen
 Directly using noisy data and mismatched envornments can lead to reward false positives, confusing the model.
 These noise could come from (i) wrong tests, (ii) unsolvable prompts (e.g., images tags), and (iii) execution environment mismatch.
 
-Run the command below to produce validated RL data for code:
+To produce locally validated RL data:
 
 ```bash
 python examples/data_preprocess/coder1.py
