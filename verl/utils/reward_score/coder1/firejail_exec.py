@@ -31,7 +31,8 @@ CLI_ARG_SIZE_LIMIT = 1024 * 3
 def code_exec_firejail(code, stdin: str = None, timeout=_DEFAULT_TIMEOUT_SECONDS, pytest: str = None):
     env = os.environ.copy()
     env["OPENBLAS_NUM_THREADS"] = "1"
-    del env["PYTHONPATH"] # avoid importing wrong stuff
+    if "PYTHONPATH" in env:
+        del env["PYTHONPATH"] # avoid importing wrong stuff
 
     # Build the firejail command with resource limits and cleanup options
     command = [
