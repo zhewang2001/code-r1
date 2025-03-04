@@ -12,23 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from importlib.metadata import version, PackageNotFoundError
+from mathruler.grader import extract_boxed_content, grade_answer
 
 
-def get_version(pkg):
-    try:
-        return version(pkg)
-    except PackageNotFoundError:
-        return None
+def compute_score(predict_str: str, ground_truth: str) -> float:
+    answer = extract_boxed_content(predict_str)
+    if grade_answer(answer, ground_truth):
+        return 1.0  # correct answer
 
-
-package_name = 'vllm'
-package_version = get_version(package_name)
-
-if package_version <= '0.6.3':
-    vllm_mode = 'customized'
-    from .vllm_rollout import vLLMRollout
-    from .fire_vllm_rollout import FIREvLLMRollout
-else:
-    vllm_mode = 'spmd'
-    from .vllm_rollout_spmd import vLLMRollout
+    return 0.0  # wrong answer
