@@ -19,12 +19,12 @@ fi
 
 # MAIN CONFIG
 MAX_EPOCHS=8
-DATASET=code-r1-12k
-MODEL_PATH=./models/Qwen2.5-7B-Instruct-1M
-ROLLOUT_N_SAMPLE=16
-ROLLOUT_N_QUERY=16
-MICRO_BATCH_PER_GPU=8 # * GPUS_PER_NODE -> GLOBAL_BATCH_SIZE
-GRAD_ACC_STEPS=4
+DATASET=code-r1-12k-leetcode2k-taco
+MODEL_PATH=Qwen/Qwen2.5-7B-Instruct-1M
+ROLLOUT_N_SAMPLE=8
+ROLLOUT_N_QUERY=8
+MICRO_BATCH_PER_GPU=1 # * GPUS_PER_NODE -> GLOBAL_BATCH_SIZE
+GRAD_ACC_STEPS=8
 GLOBAL_BATCH_SIZE=$(($(($GPUS_PER_NODE * $MICRO_BATCH_PER_GPU)) * $GRAD_ACC_STEPS))
 
 # assert ROLLOUT_N_QUERY * ROLLOUT_N_SAMPLE % GLOBAL_BATCH_SIZE == 0
@@ -56,12 +56,12 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.model.enable_gradient_checkpointing=False \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
-    actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size=256 \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size=128 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.5 \
     actor_rollout_ref.rollout.n=$ROLLOUT_N_SAMPLE \
-    actor_rollout_ref.ref.log_prob_micro_batch_size=256 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size=128 \
     actor_rollout_ref.ref.fsdp_config.param_offload=False \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
